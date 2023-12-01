@@ -22,22 +22,22 @@ def import_init_conc_data(EXP_DATE):
     # List the files in the folder
     file_names = [i for i in os.listdir(EXP_DATE) if "~" not in i]
     # load the folders:
-    enzyme_conc=[(EXP_DATE+'/'+i) for i in file_names if 'genex_mt' in i] 
-    cofactor_conc=[(EXP_DATE+'/'+i) for i in file_names if 'buffers_mt' in i] 
+    genex_mt=[(EXP_DATE+'/'+i) for i in file_names if 'genex_mt' in i] 
+    buffers_mt=[(EXP_DATE+'/'+i) for i in file_names if 'buffers_mt' in i] 
 
-    enzyme_df = pd.read_excel(get_most_updated(enzyme_conc), index_col=0).dropna(axis=1, how='all')
-    cofactor_df = pd.read_excel(get_most_updated(cofactor_conc), index_col=0).dropna(axis=1, how='all')
+    genemt_df = pd.read_excel(get_most_updated(genex_mt), index_col=0).dropna(axis=1, how='all')
+    buffersmt_df = pd.read_excel(get_most_updated(buffers_mt), index_col=0).dropna(axis=1, how='all')
 
     def unpivot_df(df, type=None):
         df = df.stack().reset_index()
         df.columns=['experiment', 'component', 'concentration']
         if not type:
-            df['type']=['enzyme'] * len(df)
+            df['type']=['DNA'] * len(df)
         else: 
-            df['type']=['cofactor'] * len(df)
+            df['type']=['compound'] * len(df)
         return df
 
-    input_data = pd.concat([unpivot_df(cofactor_df, type=1),unpivot_df(enzyme_df)])
+    input_data = pd.concat([unpivot_df(buffersmt_df, type=1),unpivot_df(genemt_df)])
 
     return pd.pivot_table(input_data, values='concentration', index=['experiment', 'type','component'])
 
@@ -65,3 +65,13 @@ def import_final_conc_data(EXP_DATE):
 
     cleaned_df = all_data[(all_data['count']>2) & (all_data['peak area'] < all_data['cutoff']) | (all_data['count']<=2)]
     return cleaned_df[['experiment', 'metabolite', 'peak area']].groupby(['experiment', 'metabolite']).mean()
+
+def peak_to_conc(met_data, std_curve_filepath): 
+    std_curves = pd.read_csv(std_curve_filepath, index_col=0)# .dropna(axis=1, how='all')
+    std_curves = std_curves.reset_index()
+    std_curves.rename({'index': 'metabolite'}, axis=1, inplace=True)
+    std_curves['metabolite'] = [i.lower() for i in std_curves['metabolite']]
+    
+    met_data = met_data.merge(std_curves, left_on='metabolite', right_on='metabolite')
+    met_data['concentration'] = met_data['peak area']*met_data['slope']+ met_data['intercept']
+    return met_data
